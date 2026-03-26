@@ -236,6 +236,18 @@ def parser2(phoneme_index, stress):
                 if nxt in (5, 6, 7, 8):
                     phoneme_index[pos] = 75  # KX
 
+        # Rule: Plosive consonant part insertion
+        # Each plosive has 3 parts: closure (idx), burst (idx+1), aspiration (idx+2)
+        # Re-read idx in case G->GX or K->KX changed it above
+        idx = phoneme_index[pos]
+        if idx in (54, 57, 60, 63, 66, 69, 72, 75):  # B,D,G,GX,P,T,K,KX
+            phoneme_index.insert(pos + 1, idx + 1)
+            stress.insert(pos + 1, stress[pos])
+            phoneme_index.insert(pos + 2, idx + 2)
+            stress.insert(pos + 2, stress[pos])
+            pos += 3
+            continue
+
         pos += 1
 
     return phoneme_index, stress

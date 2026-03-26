@@ -266,18 +266,14 @@ static mp_obj_t process_frames(size_t n_args, const mp_obj_t *args) {
         phase1 = 0; phase2 = 0; phase3 = 0;
     }
 
-    /* Downsample 3:1 (22050 -> 7350 Hz) */
+    /* Return full 22050 Hz buffer (no downsampling) */
     uint32_t end_22k = bufpos / 50;
-    uint32_t ds_len = end_22k / 3;
-    uint8_t *ds = m_new(uint8_t, ds_len);
-    for (uint32_t i = 0, j = 0; j < ds_len; i += 3, j++) {
-        ds[j] = buf[i];
-    }
-
-    /* Free the 22050 Hz buffer */
+    /* Shrink buffer to actual used size */
+    uint8_t *out = m_new(uint8_t, end_22k);
+    memcpy(out, buf, end_22k);
     m_free(buf);
 
-    return mp_obj_new_bytearray_by_ref(ds_len, ds);
+    return mp_obj_new_bytearray_by_ref(end_22k, out);
 }
 static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(process_frames_obj, 10, 10, process_frames);
 
@@ -289,7 +285,7 @@ mp_obj_t mpy_init(mp_obj_fun_bc_t *self, size_t n_args, size_t n_kw, mp_obj_t *a
     MP_DYNRUNTIME_INIT_ENTRY
 
     mp_store_global(MP_QSTR_process_frames, MP_OBJ_FROM_PTR(&process_frames_obj));
-    mp_store_global(MP_QSTR_SAMPLE_RATE, MP_OBJ_NEW_SMALL_INT(7350));
+    mp_store_global(MP_QSTR_SAMPLE_RATE, MP_OBJ_NEW_SMALL_INT(22050));
 
     MP_DYNRUNTIME_INIT_EXIT
 }

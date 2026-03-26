@@ -6,26 +6,39 @@ SAM Class
 
 .. module:: sam
 
-.. class:: SAM(pin=0, speed=72, pitch=64, mouth=128, throat=128)
+.. data:: VOICES
+
+   Dictionary of voice presets. Each entry maps a name to a tuple of
+   ``(speed, pitch, mouth, throat)``. Add custom presets at runtime:
+
+   .. code-block:: python
+
+      from sam import VOICES
+      VOICES['deep'] = (80, 40, 180, 110)
+
+.. class:: SAM(pin=0, speed=72, pitch=64, mouth=128, throat=128, voice=None)
 
    Main public API for the SAM speech synthesizer.
 
-   :param int pin: GPIO pin number for PWM audio output.
-   :param int speed: Speech speed (1-255, default 72). Lower values produce slower speech.
+   :param int pin: GPIO pin number for audio output.
+   :param int speed: Speech speed (1-255, default 72). Higher values produce slower speech.
    :param int pitch: Voice pitch (1-255, default 64). Higher values produce a higher-pitched voice.
    :param int mouth: Mouth shape parameter (1-255, default 128). Affects formant balance.
    :param int throat: Throat shape parameter (1-255, default 128). Affects formant balance.
+   :param str voice: Optional voice preset name (overrides other parameters).
 
-   .. method:: say(text)
+   .. method:: say(text, chunk_words=3)
 
-      Speak English text. Converts text to phonemes using the reciter, then
-      synthesizes and plays the audio through PWM.
+      Speak English text. Automatically splits long text into small chunks
+      at punctuation and word boundaries to avoid memory errors.
 
       :param str text: English text to speak.
+      :param int chunk_words: Maximum words per chunk (default 3). Lower = less RAM.
 
       .. code-block:: python
 
          sam.say("Hello World")
+         sam.say("A very long passage of text that will be chunked automatically.")
 
    .. method:: say_phonetic(phoneme_str)
 
@@ -37,12 +50,32 @@ SAM Class
 
          sam.say_phonetic("/HEH4LOW WERLD")
 
+   .. method:: sing(melody, bpm=80)
+
+      Sing a melody with precise beat timing. Each syllable is rendered to
+      exact duration and played as continuous phrases.
+
+      :param list melody: List of ``(pitch, phonemes, beats)`` tuples.
+         ``pitch`` is the SAM pitch value (lower = higher note, 0 = rest).
+         ``phonemes`` is a SAM phoneme string for the syllable.
+         ``beats`` is the duration as a float (1.0 = quarter note).
+      :param int bpm: Tempo in beats per minute (default 80).
+
+      .. code-block:: python
+
+         melody = [
+             (64, 'DEY4', 1.5),
+             (76, 'ZIY',  1.5),
+             (96, 'DEY4', 1.5),
+         ]
+         sam.sing(melody, bpm=80)
+
    .. method:: generate(text)
 
       Generate audio buffer from English text without playing it.
 
       :param str text: English text to speak.
-      :returns: 8-bit unsigned PCM audio data.
+      :returns: 8-bit unsigned PCM audio data at 22050 Hz.
       :rtype: bytearray
 
    .. method:: generate_phonetic(phoneme_str)
@@ -50,7 +83,7 @@ SAM Class
       Generate audio buffer from a phoneme string without playing.
 
       :param str phoneme_str: SAM phoneme string.
-      :returns: 8-bit unsigned PCM audio data.
+      :returns: 8-bit unsigned PCM audio data at 22050 Hz.
       :rtype: bytearray
 
    .. method:: text_to_phonemes(text)
@@ -67,11 +100,22 @@ SAM Class
          >>> sam.text_to_phonemes("Hello")
          '/HEHLOW'
 
+   .. method:: set_voice(name)
+
+      Apply a voice preset by name.
+
+      :param str name: Preset name (e.g. ``'robot'``, ``'elf'``).
+      :raises ValueError: If the preset name is not found.
+
+   .. staticmethod:: list_voices()
+
+      Print all available voice presets with their parameters.
+
    .. method:: set_speed(speed)
 
       Set speech speed.
 
-      :param int speed: Speed value 1-255 (default 72). Lower = slower.
+      :param int speed: Speed value 1-255 (default 72). Higher = slower.
 
    .. method:: set_pitch(pitch)
 
@@ -91,6 +135,11 @@ SAM Class
 
       :param int throat: Throat value 1-255 (default 128).
 
+   .. method:: info()
+
+      Print diagnostic information: sample rate, native module status,
+      audio driver type, PIO availability, and current voice parameters.
+
    .. method:: save_wav(text, filename)
 
       Render text to speech and save as a WAV file.
@@ -102,7 +151,7 @@ SAM Class
 
    .. method:: stop()
 
-      Stop any current playback and release hardware resources (PWM, timer).
+      Stop any current playback and release hardware resources.
 
 
 Audio Output
@@ -110,9 +159,45 @@ Audio Output
 
 .. module:: sam.audio
 
-.. class:: PWMAudio(pin=0, sample_rate=8000)
+.. data:: SAMPLE_RATE
+   :value: 22050
 
-   PWM-based audio output driver.
+   The audio sample rate in Hz.
+
+.. class:: PIOAudio(pin=0, sample_rate=22050, sm_id=0)
+
+   PIO-driven PWM audio output for RP2040. Uses a PIO state machine to
+   generate an 8-bit PWM waveform with cycle-accurate timing, and DMA to
+   feed samples from the buffer. Falls back to manual FIFO feeding if
+   DMA is unavailable.
+
+   This is the default audio driver on RP2040.
+
+   :param int pin: GPIO pin number.
+   :param int sample_rate: Playback sample rate in Hz.
+   :param int sm_id: PIO state machine ID (0-7).
+
+   .. method:: play(buffer)
+
+      Play an audio buffer. Sets up the PIO state machine and DMA,
+      then blocks until playback completes.
+
+      :param buffer: 8-bit unsigned PCM samples.
+      :type buffer: bytearray or bytes
+
+   .. method:: stop()
+
+      Stop playback and release PIO/DMA resources.
+
+   .. attribute:: is_playing
+      :type: bool
+
+      ``True`` if audio is currently playing.
+
+.. class:: PWMAudio(pin=0, sample_rate=22050)
+
+   Fallback PWM audio output using hardware PWM and timer interrupts.
+   Used on ESP32 and other non-RP2040 platforms.
 
    :param int pin: GPIO pin number.
    :param int sample_rate: Playback sample rate in Hz.
@@ -134,7 +219,7 @@ Audio Output
 
       ``True`` if audio is currently playing.
 
-.. class:: WavWriter(filename, sample_rate=8000)
+.. class:: WavWriter(filename, sample_rate=22050)
 
    Write audio samples to a WAV file.
 
@@ -155,14 +240,14 @@ Renderer
 .. module:: sam.renderer
 
 .. data:: SAMPLE_RATE
-   :value: 7350
+   :value: 22050
 
-   The output sample rate in Hz after 3:1 downsampling from 22050 Hz.
+   The output sample rate in Hz (full rate, no downsampling).
 
 .. function:: render(phoneme_index, phoneme_length, stress, speed=72, pitch=64, mouth=128, throat=128)
 
    Render processed phoneme data to an audio buffer. If the native C module
-   ``sam_render`` is available, uses it for ~100x faster rendering.
+   ``sam_render`` is available (and up to date), uses it for ~100x faster rendering.
 
    :param list phoneme_index: Phoneme index array from ``process_phonemes()``.
    :param list phoneme_length: Duration array from ``process_phonemes()``.
@@ -171,7 +256,7 @@ Renderer
    :param int pitch: Base pitch value.
    :param int mouth: Mouth shape parameter.
    :param int throat: Throat shape parameter.
-   :returns: 8-bit unsigned PCM audio data.
+   :returns: 8-bit unsigned PCM audio data at 22050 Hz.
    :rtype: bytearray
 
 
@@ -205,12 +290,21 @@ Reciter
 
 .. module:: sam.reciter
 
+.. data:: EXCEPTIONS
+
+   Dictionary mapping uppercase words to SAM phoneme strings. Checked before
+   the rule-based reciter. Add entries for words that SAM mispronounces:
+
+   .. code-block:: python
+
+      from sam.reciter import EXCEPTIONS
+      EXCEPTIONS['YOURWORD'] = 'YOHR4WERD'
+
 .. function:: text_to_phonemes(text)
 
-   Convert English text to a SAM phoneme string using rule-based pronunciation.
-
-   The reciter uses over 200 context-sensitive rules organized by starting letter.
-   Rules use pattern matching with wildcards for prefixes and suffixes.
+   Convert English text to a SAM phoneme string. Checks the exception
+   dictionary first, then applies rule-based pronunciation using 200+
+   context-sensitive rules organized by starting letter.
 
    :param str text: English text.
    :returns: SAM phoneme string with stress markers.
@@ -220,5 +314,5 @@ Reciter
 
       >>> text_to_phonemes("Hello World")
       '/HEHLOW WERLD'
-      >>> text_to_phonemes("Testing")
-      'TEHSTIHNX'
+      >>> text_to_phonemes("Robot")
+      'ROW4BAHT'

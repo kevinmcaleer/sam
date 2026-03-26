@@ -6,10 +6,27 @@ to render "Hello World" on the Pico. The native C module ``sam_render``
 replaces the hot render loop with compiled ARM code, reducing this to ~17ms
 (~100x faster).
 
+Use ``sam.info()`` to check whether the native module is active:
+
+.. code-block:: text
+
+   >>> sam.info()
+   SAM Speech Synthesizer v1.0.0
+     sample rate: 22050 Hz
+     native C renderer: active
+     audio driver: PIOAudio
+     ...
+
+The ``native C renderer`` field shows:
+
+- **active** -- native module loaded and in use
+- **not found** -- no ``sam_render.mpy`` on the device (using Python fallback)
+- **outdated (recompile for 22050 Hz)** -- old module detected, ignored until recompiled
+
 Using the Pre-built Module
 --------------------------
 
-Pre-built modules are included in ``natmod/build/``:
+Pre-built modules are included in ``natmod/``:
 
 .. list-table::
    :header-rows: 1
@@ -30,15 +47,16 @@ Copy the correct module for your platform:
 .. code-block:: bash
 
    # Raspberry Pi Pico
-   mpremote cp natmod/build/sam_render_rp2.mpy :lib/sam_render.mpy
+   mpremote cp natmod/sam_render_rp2.mpy :lib/sam_render.mpy
 
    # ESP32
-   mpremote cp natmod/build/sam_render_esp32.mpy :lib/sam_render.mpy
+   mpremote cp natmod/sam_render_esp32.mpy :lib/sam_render.mpy
 
 .. important::
 
    The file must be named ``sam_render.mpy`` on the device regardless of
-   which platform build you copy. The renderer imports ``sam_render`` by name.
+   which platform build you copy. Place it in ``/`` or ``/lib/``.
+   The renderer imports ``sam_render`` by name.
 
 The renderer automatically detects and uses the native module when available.
 No code changes are needed -- ``sam.say()`` just becomes faster.
@@ -182,11 +200,11 @@ The native module exports a single function:
    :param bytearray samp_flags: Sampled consonant flags per frame.
    :param int num_frames: Total number of frames.
    :param int speed: Synthesis speed (ticks per frame, default 72).
-   :returns: 8-bit unsigned PCM audio, downsampled 3:1 from 22050 to 7350 Hz.
+   :returns: 8-bit unsigned PCM audio at 22050 Hz.
    :rtype: bytearray
 
 .. data:: sam_render.SAMPLE_RATE
-   :value: 7350
+   :value: 22050
 
    Output sample rate in Hz.
 
@@ -200,7 +218,6 @@ The native module implements the same algorithm as the Python renderer:
 2. **Timetable output** for C64-accurate sample spacing at 22050 Hz
 3. **Glottal pulse** tracking with phase reset and 75% voiced region
 4. **Sampled consonants** for fricatives and plosive bursts
-5. **3:1 downsampling** to 7350 Hz for efficient PWM playback
 
 The C code embeds all lookup tables (sinus, rectangle, mult_table,
 sample_table, timetable) for zero-overhead access.

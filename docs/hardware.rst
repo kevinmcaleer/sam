@@ -4,16 +4,15 @@ Hardware Setup
 Supported Platforms
 -------------------
 
-- **Raspberry Pi Pico** (RP2040) -- primary target, native C module included
-- **ESP32** -- compatible (Python code works, native C module requires Xtensa compiler to build)
+- **Raspberry Pi Pico** (RP2040) -- primary target, PIO audio + native C module
+- **ESP32** -- compatible (PWM fallback, native C module requires Xtensa build)
 - **Desktop Python** -- WAV file generation for testing
 
 .. note::
 
-   The pure Python code runs on any MicroPython board with PWM support.
-   The native C module (for fast rendering) must be compiled separately
-   for each architecture. A pre-built module is included for RP2040.
-   See :doc:`native_module` for building on other platforms.
+   On RP2040, SAM uses PIO-driven PWM with DMA for jitter-free audio output.
+   On other platforms, it falls back to timer-based PWM.
+   Use ``sam.info()`` to see which audio driver is active.
 
 Circuit
 -------
@@ -57,29 +56,38 @@ Use any GPIO capable of PWM output. GPIO 25 and 26 are common choices.
 
    sam = SAM(pin=25)
 
-PWM Audio Details
------------------
+Audio Output Details
+--------------------
 
-Audio is output as a PWM signal with the following characteristics:
+**RP2040 (PIO Audio):**
 
 .. list-table::
-   :widths: 30 20 20
+   :widths: 30 30
 
-   * - Parameter
-     - Pico (RP2040)
-     - ESP32
-   * - PWM frequency
-     - 62.5 kHz
-     - 40 kHz
-   * - PWM resolution
-     - ~10-bit effective
-     - ~10-bit effective
    * - Sample rate
-     - 8000 Hz
-     - 8000 Hz
+     - 22050 Hz
+   * - Bit depth
+     - 8-bit unsigned PCM
+   * - PWM method
+     - PIO state machine (8-bit resolution, ~22 kHz carrier)
+   * - Sample delivery
+     - DMA (zero CPU involvement during playback)
+   * - Jitter
+     - None (cycle-accurate PIO timing)
 
-The PWM carrier frequency is well above the audible range. The duty cycle
-modulation encodes the audio waveform.
+**ESP32 / Fallback (Timer PWM):**
+
+.. list-table::
+   :widths: 30 30
+
+   * - Sample rate
+     - 22050 Hz
+   * - PWM carrier
+     - 40 kHz
+   * - Sample delivery
+     - Timer interrupt
+   * - Jitter
+     - Low (dependent on ISR latency)
 
 Improving Audio Quality
 -----------------------

@@ -540,6 +540,63 @@ RULES_Z = [
     "(Z)=Z",
 ]
 
+# Exception dictionary: words the rules get wrong.
+# Maps uppercase word to phoneme output.
+# Add entries here for any word SAM mispronounces.
+EXCEPTIONS = {
+    'ROBOT': 'ROW4BAHT',
+    'ROBOTS': 'ROW4BAHTS',
+    'ROBOTIC': 'ROW4BAH4TIK',
+    'MICRO': 'MAY4KROW',
+    'PYTHON': 'PAY4THAHN',
+    'PICO': 'PIY4KOW',
+    'DATA': 'DEY4TAH',
+    'COMPUTER': 'KAHMPYUW4TER',
+    'AUDIO': 'AO4DIYOW',
+    'VIDEO': 'VIH4DIYOW',
+    'MOTOR': 'MOW4TER',
+    'MOTORS': 'MOW4TERZ',
+    'TOTAL': 'TOW4TUL',
+    'PROGRAM': 'PROW4GRAEM',
+    'PHOTO': 'FOW4TOW',
+    'SOLAR': 'SOW4LER',
+    'SONAR': 'SOW4NAHR',
+    'MOBILE': 'MOW4BIYL',
+    'HOTEL': 'HOWTEH4L',
+    'TROPHY': 'TROW4FIY',
+    'GLOBAL': 'GLOW4BUL',
+    'LOCAL': 'LOW4KUL',
+    'FOCAL': 'FOW4KUL',
+    'VOCAL': 'VOW4KUL',
+    'LOCATE': 'LOW4KEYT',
+    'POLAR': 'POW4LER',
+    'MOMENT': 'MOW4MEHNT',
+    'OPEN': 'OW4PUN',
+    'OVER': 'OW4VER',
+    'OCEAN': 'OW4SHUN',
+    'ONLY': 'OW4NLIY',
+    'BONUS': 'BOW4NUHS',
+    'FOCUS': 'FOW4KUHS',
+    'NOTICE': 'NOW4TIHS',
+    'MOTION': 'MOW4SHUN',
+    'NOTION': 'NOW4SHUN',
+    'POTION': 'POW4SHUN',
+    'FROZEN': 'FROW4ZUN',
+    'BROKEN': 'BROW4KUN',
+    'SPOKEN': 'SPOW4KUN',
+    'WOKEN': 'WOW4KUN',
+    'TOKEN': 'TOW4KUN',
+    'CHOSEN': 'CHOW4ZUN',
+    'VOLTAGE': 'VOW4LTIHJ',
+    'SERVO': 'SER4VOW',
+    'SENSOR': 'SEH4NSER',
+    'LED': 'EH4LIYDIY4',
+    'GPIO': 'JIY4PIY4AY4OW4',
+    'WIFI': 'WAY4FAY',
+    'UART': 'YUW4AA4RT',
+    'SPI': 'EH4SPIY4AY4',
+}
+
 # All rules indexed by letter
 ALL_RULES = {
     ' ': RULES_PUNCT,
@@ -738,6 +795,18 @@ def text_to_phonemes(text):
 
     while pos < len(text) - 1:
         ch = text[pos]
+
+        # Check exception dictionary for whole words
+        if ch.isalpha():
+            # Find the end of this word
+            wend = pos
+            while wend < len(text) and text[wend].isalpha():
+                wend += 1
+            word = text[pos:wend]
+            if word in EXCEPTIONS:
+                output.append(EXCEPTIONS[word])
+                pos = wend
+                continue
 
         # Handle digits
         if ch.isdigit():

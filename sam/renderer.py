@@ -14,9 +14,8 @@ except ImportError:
         def native(f):
             return f
 
-# Render at 22050 Hz via timetable, then downsample 3:1 for playback.
-# PWM timer at 7350 Hz gives the ISR ~136us per tick (vs ~45us at 22050).
-SAMPLE_RATE = 7350
+# Render at 22050 Hz via timetable — output at full rate for best quality.
+SAMPLE_RATE = 22050
 
 
 def create_frames(phoneme_index, phoneme_length, stress, pitch, mouth, throat):
@@ -124,8 +123,16 @@ def create_frames(phoneme_index, phoneme_length, stress, pitch, mouth, throat):
 try:
     import sam_render as _native
     _HAS_NATIVE = True
+    # Check if native module outputs at full rate (recompile needed after upgrade)
+    _native_rate = getattr(_native, 'SAMPLE_RATE', 7350)
+    if _native_rate < SAMPLE_RATE:
+        _HAS_NATIVE = False
+        _NATIVE_STATUS = 'outdated (recompile for 22050 Hz)'
+    else:
+        _NATIVE_STATUS = 'active'
 except ImportError:
     _HAS_NATIVE = False
+    _NATIVE_STATUS = 'not found'
 
 
 @micropython.native
@@ -282,12 +289,5 @@ def render(phoneme_index, phoneme_length, stress, speed=72, pitch=64,
         n = glottal_pulse - (glottal_pulse >> 2)
         phase1 = 0; phase2 = 0; phase3 = 0
 
-    # Downsample 3:1 (22050 -> 7350 Hz) for Pico PWM playback
     end = bufpos // 50
-    ds_len = end // 3
-    ds = bytearray(ds_len)
-    j = 0
-    for i in range(0, end - 2, 3):
-        ds[j] = buf[i]
-        j += 1
-    return ds
+    return buf[:end]

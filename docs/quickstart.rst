@@ -30,7 +30,16 @@ For faster rendering, also install the native C module:
 
 .. code-block:: bash
 
-   mpremote cp natmod/build/sam_render.mpy :lib/sam_render.mpy
+   # Raspberry Pi Pico
+   mpremote cp natmod/sam_render_rp2.mpy :lib/sam_render.mpy
+
+   # ESP32
+   mpremote cp natmod/sam_render_esp32.mpy :lib/sam_render.mpy
+
+.. important::
+
+   The file must be named ``sam_render.mpy`` on the device. Place it in
+   ``/`` or ``/lib/``.
 
 Basic Usage
 -----------
@@ -45,31 +54,57 @@ Basic Usage
    # Speak English text
    sam.say("Hello World")
 
+   # Long text is automatically chunked to avoid memory errors
+   sam.say("I can speak long passages of text without running out of memory.")
+
+   # Check what's running under the hood
+   sam.info()
+
    # Clean up when done
    sam.stop()
 
-Voice Customization
--------------------
+Voice Presets
+-------------
+
+SAM includes built-in voice presets:
 
 .. code-block:: python
 
-   sam = SAM(pin=0)
+   from sam import SAM
 
-   # Adjust parameters
-   sam.set_speed(72)     # Speech rate (1-255, default 72). Lower = slower.
+   # Use a preset at creation
+   sam = SAM(pin=0, voice='robot')
+   sam.say("I am a robot")
+
+   # Switch voices on the fly
+   sam.set_voice('elf')
+   sam.say("hello tiny world")
+
+   # See all available presets
+   sam.list_voices()
+
+Available presets: ``sam``, ``robot``, ``elf``, ``old_man``, ``whisper``,
+``alien``, ``giant``, ``child``, ``stuffy``.
+
+Add custom presets at runtime:
+
+.. code-block:: python
+
+   from sam import VOICES
+   VOICES['squeaky'] = (60, 120, 100, 180)  # (speed, pitch, mouth, throat)
+   sam.set_voice('squeaky')
+
+Voice Parameters
+----------------
+
+Fine-tune the voice manually:
+
+.. code-block:: python
+
+   sam.set_speed(72)     # Speech rate (1-255, default 72). Higher = slower.
    sam.set_pitch(64)     # Voice pitch (1-255, default 64). Higher = squeakier.
    sam.set_mouth(128)    # Mouth shape (1-255, default 128).
    sam.set_throat(128)   # Throat shape (1-255, default 128).
-
-   # Robot voice
-   sam.set_pitch(40)
-   sam.set_mouth(150)
-   sam.set_throat(90)
-   sam.say("I am a robot")
-
-   # High-pitched voice
-   sam.set_pitch(96)
-   sam.say("Hello there")
 
 Speaking Phonemes Directly
 --------------------------
@@ -86,6 +121,53 @@ Use ``text_to_phonemes()`` to see what the reciter generates:
 
    phonemes = sam.text_to_phonemes("Hello World")
    print(phonemes)  # /HEHLOW WERLD
+
+Fixing Pronunciation
+--------------------
+
+If a word sounds wrong, add it to the exception dictionary in
+``sam/reciter.py``:
+
+.. code-block:: python
+
+   # In sam/reciter.py
+   EXCEPTIONS = {
+       'ROBOT': 'ROW4BAHT',
+       'YOURWORD': 'phonemes here',
+       ...
+   }
+
+The exception dictionary is checked before the rule-based reciter.
+
+Singing
+-------
+
+SAM can sing melodies with precise beat timing:
+
+.. code-block:: python
+
+   from sam import SAM
+
+   sam = SAM(pin=0)
+
+   # Note-to-pitch mapping (lower value = higher note)
+   N = {
+       'C3':96, 'D3':86, 'E3':76, 'F3':72, 'G3':64, 'A3':57, 'B3':51,
+       'C4':48, 'D4':43, 'E4':38, 'F4':36, 'G4':32, 'A4':28,
+       'R':0,
+   }
+
+   # Each tuple: (pitch, phonemes, beats)
+   melody = [
+       (N['G3'], 'DEY4',  1.5),
+       (N['E3'], 'ZIY',   1.5),
+       (N['C3'], 'DEY4',  1.5),
+       (N['C3'], 'ZIY',   1.5),
+   ]
+
+   sam.sing(melody, bpm=80)
+
+See the ``example.py`` file for a full "Daisy Bell" rendition.
 
 Saving to WAV
 -------------

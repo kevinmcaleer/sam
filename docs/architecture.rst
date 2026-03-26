@@ -14,8 +14,9 @@ Pipeline Overview
    English text
         |
         v
-   +-----------+     200+ context-sensitive rules
-   |  Reciter  |     "HELLO" -> "/HEHLOW"
+   +-----------+     Exception dictionary (exact word match)
+   |  Reciter  |     + 200+ context-sensitive rules
+   |           |     "ROBOT" -> "ROW4BAHT"
    +-----------+
         |
         v
@@ -27,12 +28,12 @@ Pipeline Overview
         v
    +-----------+     Frame expansion, formant transitions,
    |  Renderer |     3-formant additive synthesis,
-   |           |     timetable output, 3:1 downsampling
+   |           |     timetable output at 22050 Hz
    +-----------+
         |
         v
-   +-----------+     PWM duty cycle modulation at 8000 Hz
-   |   Audio   |     Timer ISR or tight-loop playback
+   +-----------+     PIO PWM + DMA on RP2040 (jitter-free)
+   |   Audio   |     Timer PWM fallback on ESP32
    +-----------+
         |
         v
@@ -41,8 +42,13 @@ Pipeline Overview
 Reciter
 -------
 
-The reciter (``sam/reciter.py``) converts English text to SAM phoneme strings
-using a rule-based approach. Rules are grouped by starting letter and have the
+The reciter (``sam/reciter.py``) converts English text to SAM phoneme strings.
+
+**Exception dictionary**: Common words that the rules mispronounce are handled
+by a dictionary lookup before rules are applied. This includes words with
+open-syllable O (robot, motor, program) and maker/embedded terms (GPIO, UART).
+
+**Rule-based conversion**: Rules are grouped by starting letter and have the
 form::
 
     prefix(match)suffix=phonemes
@@ -56,11 +62,9 @@ Wildcards in prefix and suffix patterns:
 - ``:`` -- zero or more consonants
 - ``%`` -- common suffix (ER, ES, ED, ING, ELY, EFUL, ENESS)
 
-Example rules::
-
-    (SH)=SH             # "SH" always maps to SH phoneme
-    " (THE) "=DHAX      # "THE" before space maps to DHAX
-    #:(ALLY)=ULIY        # vowel+consonants+"ALLY" maps to ULIY
+**Text chunking**: The ``say()`` method automatically splits long text at
+punctuation (``. ! ? ; , :``) and word boundaries, rendering and playing
+a few words at a time to avoid memory errors on constrained devices.
 
 Phoneme Processor
 -----------------
@@ -81,7 +85,8 @@ Renderer
 --------
 
 The renderer (``sam/renderer.py``) generates audio using three-formant additive
-synthesis, matching the original C64 SAM algorithm.
+synthesis, matching the original C64 SAM algorithm. Output is at the full
+22050 Hz sample rate (no downsampling).
 
 Frame Creation
 ^^^^^^^^^^^^^^
@@ -126,7 +131,6 @@ Timetable Output
 
 The output buffer uses a timetable for C64-accurate sample spacing at 22050 Hz.
 Each tick writes 5 identical samples at a timetable-determined position.
-The buffer is then downsampled 3:1 to 7350 Hz for efficient PWM playback.
 
 Sampled Consonants
 ^^^^^^^^^^^^^^^^^^
@@ -134,6 +138,38 @@ Sampled Consonants
 Fricatives (S, SH, F, TH, /H, /X) and plosive bursts use bit-packed
 sample data from a 1280-byte table, producing noise-like waveforms that
 are output through the timetable system.
+
+Audio Driver
+------------
+
+**PIO Audio (RP2040)**:
+
+An 8-instruction PIO program generates PWM with 8-bit duty cycle resolution.
+DMA feeds 8-bit samples from the audio buffer to the PIO FIFO as packed
+32-bit words (4 samples per word). The PIO unpacks them via autopull and
+``out x, 8``. The clock divider is tuned so each PWM cycle takes exactly
+1/22050 seconds.
+
+This provides zero-jitter sample output with no CPU involvement during
+playback -- similar to the hardware-timed output the C64's SID chip provided.
+
+**PWM Audio (fallback)**:
+
+On non-RP2040 platforms, a timer interrupt updates the hardware PWM duty
+cycle at the sample rate. A tight-loop fallback is used if timer interrupts
+are unavailable.
+
+Singing
+-------
+
+The ``sing()`` method renders syllables at different pitches and concatenates
+them into continuous phrase buffers with precise beat timing:
+
+1. Each note's ``speed`` is scaled proportional to its beat duration
+2. Syllables are rendered via ``generate_phonetic()``
+3. Buffers are trimmed or silence-padded to exact sample counts
+4. A 50ms fade-out is applied at the end of each note
+5. Notes are grouped into ~40KB phrases for memory-safe playback
 
 Data Tables
 -----------
@@ -189,13 +225,13 @@ Approximate RAM usage on RP2040:
      - Bytes
    * - Lookup tables
      - ~3.5 KB
-   * - Reciter rules
-     - ~8 KB
-   * - Audio buffer ("Hello World")
-     - ~6 KB
+   * - Reciter rules + exceptions
+     - ~10 KB
+   * - Audio buffer (3-word chunk)
+     - ~15 KB
    * - Frame arrays (temp)
      - ~1 KB
    * - Native C module
      - ~3.5 KB
    * - **Total typical**
-     - **~22 KB**
+     - **~33 KB**

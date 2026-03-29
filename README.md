@@ -2,7 +2,7 @@
 
 A MicroPython port of **SAM (Software Automatic Mouth)**, the classic text-to-speech engine originally created for the Commodore 64 in 1982.
 
-SAM runs on a Raspberry Pi Pico with just a speaker and a resistor. It uses PIO-driven PWM with DMA for jitter-free audio output at 22050 Hz.
+SAM runs on a Raspberry Pi Pico with just a speaker and an optional resistor. It uses PIO-driven PWM with DMA for jitter-free audio output at 22050 Hz.
 
 ```
 GPIO pin --[1K resistor]--> Speaker(+) --> GND
